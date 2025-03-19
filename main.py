@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QFormLayout, QMessageBox, QGroupBox, QHBoxLayout, QSpacerItem, QSizePolicy)
+from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QFormLayout, QMessageBox, QGroupBox, QHBoxLayout, QStackedWidget)
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
@@ -41,35 +41,73 @@ class ClimateSimulation(QWidget):
         super().__init__()
         self.setWindowTitle("Climate Simulation GUI")
         self.setGeometry(100, 100, 800, 800)
+        self.setStyleSheet("background-color: #2c3e50; color: #ecf0f1;")
 
         layout = QVBoxLayout(self)
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
 
-        content = QWidget()
-        content_layout = QVBoxLayout(content)
+        title = QLabel("Climate Simulation")
+        title.setStyleSheet("font-size: 30px; font-weight: bold; text-align: center;")
+        description = QLabel("Explore how temperature and vegetation change over time based on various climate parameters.")
+        description.setStyleSheet("font-size: 18px; margin-bottom: 20px; text-align: center;")
 
-        self.inputs = {}
-        for param, default in default_values.items():
-            group_box = QGroupBox(param)
-            group_layout = QVBoxLayout()
+        layout.addWidget(title)
+        layout.addWidget(description)
 
-            label = QLabel(f"{param} - {descriptions[param]}")
-            entry = QLineEdit(str(default))
-            self.inputs[param] = entry
+        button_layout = QHBoxLayout()
+        self.stack = QStackedWidget()
 
-            group_layout.addWidget(label)
-            group_layout.addWidget(entry)
-            group_box.setLayout(group_layout)
+        # Create buttons for each group
+        buttons = [
+            ("General Settings", self.create_general_settings),
+            ("Temperature Parameters", self.create_temperature_parameters),
+            ("Vegetation Parameters", self.create_vegetation_parameters),
+            ("Initial Conditions", self.create_initial_conditions)
+        ]
+        for label, func in buttons:
+            button = QPushButton(label)
+            button.setStyleSheet("font-size: 20px; padding: 12px; margin: 8px; background-color: #3498db; color: white; border-radius: 8px;")
+            button.clicked.connect(func)
+            button_layout.addWidget(button)
 
-            content_layout.addWidget(group_box)
+        layout.addLayout(button_layout)
+        layout.addWidget(self.stack)
 
         run_button = QPushButton("Run Simulation")
+        run_button.setStyleSheet("font-size: 22px; padding: 16px; margin-top: 20px; background-color: #e74c3c; color: white; border-radius: 8px;")
         run_button.clicked.connect(self.run_simulation)
+        layout.addWidget(run_button)
 
-        content_layout.addWidget(run_button)
-        scroll_area.setWidget(content)
-        layout.addWidget(scroll_area)
+        self.inputs = {}
+        self.create_general_settings()
+
+    def create_group(self, params):
+        group = QWidget()
+        layout = QFormLayout(group)
+        for param in params:
+            label = QLabel(f"{param} - {descriptions[param]}")
+            label.setStyleSheet("font-size: 16px; margin-right: 10px;")
+            entry = QLineEdit(str(default_values[param]))
+            entry.setStyleSheet("font-size: 16px; padding: 6px;")
+            self.inputs[param] = entry
+            layout.addRow(label, entry)
+        group.setLayout(layout)
+        return group
+
+    def create_general_settings(self):
+        self.stack.addWidget(self.create_group(['days', 'time_points']))
+        self.stack.setCurrentIndex(self.stack.count() - 1)
+
+    def create_temperature_parameters(self):
+        self.stack.addWidget(self.create_group(['lambda_', 'b', 'S', 'e']))
+        self.stack.setCurrentIndex(self.stack.count() - 1)
+
+    def create_vegetation_parameters(self):
+        self.stack.addWidget(self.create_group(['K', 'sigma', 'b1', 'T0', 'alpha2']))
+        self.stack.setCurrentIndex(self.stack.count() - 1)
+
+    def create_initial_conditions(self):
+        self.stack.addWidget(self.create_group(['initial_temp']))
+        self.stack.setCurrentIndex(self.stack.count() - 1)
 
     def run_simulation(self):
         try:
