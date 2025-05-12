@@ -9,13 +9,13 @@ from scipy.integrate import solve_ivp
 # Constants
 default_values = {
     # First model parameters
-    'lambda_': 1.0, 'b': 0.3, 'S_base': 0.3, 'e': 0.6, 'K': 1.0, 'sigma': 0.1, 'b1': 0.02, 'T0': 20.0, 'alpha2': 0.01,
+    'lambda_': 1.0, 'b': 240.0, 'S_base': 0.3, 'e': 0.6, 'K': 1.0, 'sigma': 0.1, 'b1': 0.02, 'T0': 20.0, 'alpha2': 0.01,
     'albedo_veg': 0.15, 'albedo_bare': 0.3, 'days': 1000, 'time_points': 1000, 'initial_temp': 288.15,
     'initial_veg': 0.5,
 
     # Second model parameters (from the image)
-    'a': 0.5, 's1': 0.8, 's0': 0.3, 'b1_alt': 0.1, 'T0_alt': 20.0, 'sigma_alt': 0.1, 'initial_temp_alt': 288.15,
-    'initial_veg_alt': 0.5, 'q': 0.05, 'r': 0.25
+    'a': 5.67e-8, 's1': 0.95, 's0': 0.1, 'b1_alt': 0.1, 'T0_alt': 300.0, 'sigma_alt': 0.1, 'initial_temp_alt': 288.15,
+    'initial_veg_alt': 0.5, 'q': 3, 'r': 2.0, 'a2': 0.004
 }
 
 descriptions = {
@@ -46,7 +46,8 @@ descriptions = {
     'initial_temp_alt': "Initial temperature T for the second model.",
     'initial_veg_alt': "Initial vegetation density u for the second model.",
     'q': "Vegetation sensitivity parameter q in equation (9).",
-    'r': "Temperature scaling parameter r in equation (9)."
+    'r': "Temperature scaling parameter r in equation (9).",
+    'a2': "Temperature inhibition parameter a₂ in equation (10)."
 }
 
 
@@ -67,19 +68,26 @@ def coupled_system_1(t, y, params):
     return [dT_dt, du_dt]
 
 
-# Coupled system for the second model (from the image)
+# Update your coupled_system_2 function:
 def coupled_system_2(t, y, params):
     T, u = y  # Temperature and vegetation density
 
-    # Implementation of equation (9) from the image
-    # (1/r)(-aT⁴ + b[1-(s₁-s₀)e⁻ᵠᵘ-s₀]) = 0
-    dT_dt = params['r'] * (-params['a'] * T ** 4 + params['b'] * (1 - (params['s1'] - params['s0']) *
-                                                                  np.exp(-params['q'] * u) - params['s0']))
+    # Prevent division by zero or very small temperatures
+    T = max(T, 1e-6)  # Ensure T doesn't get too close to zero
 
-    # Implementation of equation (10) from the image
-    # (b₁e⁻ᵀ⁰/ᵀe⁻ᵃᵀ² - u)u - σu = 0
-    du_dt = (params['b1_alt'] * np.exp(-params['T0_alt'] / T) * np.exp(-params['a'] * T ** 2) - u) * u - params[
-        'sigma_alt'] * u
+    # Implementation of the differential equation for temperature
+    # dT/dt = (1/λ)(-aT⁴ + b[1-(s₁-s₀)e⁻ᶜ¹ᵘ-s₀])
+    dT_dt = (1 / params['r']) * (-params['a'] * T ** 4 + params['b'] *
+                                 (1 - (params['s1'] - params['s0']) * np.exp(-params['q'] * u) - params['s0']))
+
+    # Implement safety checks to avoid overflow in the exponential terms
+    # Limit the maximum/minimum values for the exponents
+    exp1_arg = min(max(params['T0_alt'] / T, -700), 700)  # Limit between -700 and 700
+    exp2_arg = min(max(-params['a2'] * T, -700), 700)  # Limit between -700 and 700
+
+    # Implementation of the differential equation for vegetation
+    # du/dt = (b₁e^(T₀/T)e^(-a₂T) - u)u - σu
+    du_dt = (params['b1_alt'] * np.exp(exp1_arg) * np.exp(exp2_arg) - u) * u - params['sigma_alt'] * u
 
     return [dT_dt, du_dt]
 
@@ -247,7 +255,7 @@ class ClimateSimulation(QWidget):
         general_params2 = self.create_param_group(['days', 'time_points'], "model2")
         temp_params2 = self.create_param_group(['a', 'r', 'b'], "model2")
         albedo_params2 = self.create_param_group(['s1', 's0', 'q'], "model2")
-        veg_params2 = self.create_param_group(['b1_alt', 'T0_alt', 'sigma_alt'], "model2")
+        veg_params2 = self.create_param_group(['b1_alt', 'T0_alt', 'a2', 'sigma_alt'], "model2")
         init_params2 = self.create_param_group(['initial_temp_alt', 'initial_veg_alt'], "model2")
 
         # Add parameter groups to stack
